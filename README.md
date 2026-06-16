@@ -1,5 +1,7 @@
 # 盘搜 - PanSou 千帆风格前端
 
+> 🔗 **在线访问：https://bbin5076-ops.github.io/**
+
 千帆搜索 (pan.qianfan.app) 风格的聚合网盘搜索引擎前端，基于 [PanSou API](https://github.com/fish2018/pansou)。
 
 ## 效果预览
@@ -32,10 +34,14 @@ docker cp index.html pansou:/app/frontend/dist/index.html
 ## 搜索源配置
 
 - **159 个 Telegram 频道**：覆盖百度/阿里/夸克/迅雷/天翼/UC/115/PikPak 等网盘资源频道
-- **88 个搜索插件**：综合网盘搜索 + 影视动漫 + 磁力 BT + 学习资源 + 论坛社区
+- **88 个搜索插件**：综合网盘搜索 + 影视动漫 + 磁力 BT + 学习资源 + 论坛社区（含微博、QQ频道）
 
 ## 技术栈
 
 - 纯 HTML/CSS/JS 单页面
 - 调用 PanSou REST API (`/api/search`)
 - 无需任何构建工具，即拷即用
+
+## GitHub Pages
+
+本仓库同时部署在 GitHub Pages：https://bbin5076-ops.github.io/
