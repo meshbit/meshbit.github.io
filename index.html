@@ -218,12 +218,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 <div class="toast" id="toast"></div>
 
 <script>
-// ====== 配置：改成你的 PanSou API 地址 ======
-// 本地部署留空即可，部署到 GitHub Pages 需填公网地址
-// 例如：'https://pansou.你的域名.com' 或 Cloudflare Tunnel 地址
-const API_BASE = '';
-// ===========================================
-
 let allResults = {};
 let currentType = '';
 
@@ -239,6 +233,9 @@ function quickSearch(kw) {
   document.getElementById('sourceFilter').value = '';
   searchAPI(kw, '');
 }
+
+// 👇 改成你的 Cloudflare Tunnel 域名（HTTPS），例如 'https://pansou.xxx.trycloudflare.com'
+const API_BASE = 'https://pansou.okva.cc';
 
 async function searchAPI(kw, source) {
   const wrap = document.getElementById('resultsWrap');
