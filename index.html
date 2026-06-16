@@ -218,6 +218,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 <div class="toast" id="toast"></div>
 
 <script>
+// ====== 配置：改成你的 PanSou API 地址 ======
+// 本地部署留空即可，部署到 GitHub Pages 需填公网地址
+// 例如：'https://pansou.你的域名.com' 或 Cloudflare Tunnel 地址
+const API_BASE = '';
+// ===========================================
+
 let allResults = {};
 let currentType = '';
 
@@ -241,7 +247,7 @@ async function searchAPI(kw, source) {
   list.innerHTML = '<div class="loading"><div class="spinner"></div><p>正在搜索全网资源...</p></div>';
 
   try {
-    let url = '/api/search?kw=' + encodeURIComponent(kw);
+    let url = API_BASE + '/api/search?kw=' + encodeURIComponent(kw);
     if (source) url += '&cloud_types=' + source;
     const resp = await fetch(url);
     const json = await resp.json();
