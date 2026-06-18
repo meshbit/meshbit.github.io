@@ -1,0 +1,7 @@
+# 运行时数据
+data/cache/
+data/logs/
+data/ssl/
+
+# Docker
+*.log
