@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PanSou 网盘搜索</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Microsoft YaHei', sans-serif; background: #0f0f0f; color: #eee; min-height: 100vh; }
+.header { background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 40px 20px; text-align: center; }
+.header h1 { font-size: 2em; margin-bottom: 6px; background: linear-gradient(90deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.header p { color: #888; font-size: 0.9em; }
+.search-box { max-width: 700px; margin: -25px auto 0; padding: 0 20px; position: relative; z-index: 10; }
+.search-row { display: flex; background: #1e1e1e; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(102,126,234,.3); }
+.search-row input { flex:1; padding: 16px 20px; font-size: 1.1em; border: none; background: transparent; color: #fff; outline: none; }
+.search-row button { padding: 16px 30px; border:none; background: linear-gradient(135deg, #667eea, #764ba2); color:#fff; font-size:1.1em; cursor:pointer; font-weight: bold; }
+.search-row button:hover { opacity: 0.9; }
+.filters { max-width: 700px; margin: 15px auto; padding: 0 20px; display: flex; gap: 8px; flex-wrap: wrap; }
+.filters label { display: flex; align-items: center; gap: 4px; font-size: 0.85em; color: #aaa; cursor: pointer; }
+.filters input[type=checkbox] { accent-color: #667eea; }
+.results { max-width: 900px; margin: 20px auto; padding: 0 20px; }
+.type-section { margin-bottom: 25px; }
+.type-title { font-size: 1.1em; padding: 8px 0; border-bottom: 2px solid #667eea; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.type-title .count { font-size: 0.8em; color: #888; }
+.card { background: #1a1a1a; border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; border-left: 3px solid #333; transition: .2s; }
+.card:hover { border-left-color: #667eea; background: #1e1e2e; }
+.card .title { font-size: 1em; color: #667eea; margin-bottom: 6px; word-break: break-all; }
+.card .title a { color: #667eea; text-decoration: none; }
+.card .title a:hover { text-decoration: underline; }
+.card .meta { font-size: 0.8em; color: #666; display: flex; gap: 15px; flex-wrap: wrap; }
+.card .meta span { display: flex; align-items: center; gap: 4px; }
+.card .pwd { color: #f0a500; font-weight: bold; }
+.loading { text-align: center; padding: 40px; color: #888; }
+.spinner { width: 30px; height: 30px; border: 3px solid #333; border-top-color: #667eea; border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty { text-align: center; padding: 60px 20px; color: #555; }
+.empty .icon { font-size: 3em; margin-bottom: 10px; }
+.status { max-width: 700px; margin: 10px auto 0; padding: 0 20px; font-size: 0.8em; color: #555; text-align: center; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🔍 PanSou 网盘搜索</h1>
+  <p>搜罗全网网盘资源 · 百度网盘 · 阿里云盘 · 夸克 · 迅雷 · 115 · UC</p>
+</div>
+<div class="search-box">
+  <div class="search-row">
+    <input id="kw" type="text" placeholder="输入关键词，如：流浪地球、Python教程..." autofocus onkeydown="if(event.key==='Enter')search()">
+    <button onclick="search()">搜 索</button>
+  </div>
+</div>
+<div class="filters">
+  <label><input type="checkbox" value="baidu" checked onchange="search()"> 百度网盘</label>
+  <label><input type="checkbox" value="aliyun" checked onchange="search()"> 阿里云盘</label>
+  <label><input type="checkbox" value="quark" checked onchange="search()"> 夸克</label>
+  <label><input type="checkbox" value="xunlei" checked onchange="search()"> 迅雷</label>
+  <label><input type="checkbox" value="115" checked onchange="search()"> 115</label>
+  <label><input type="checkbox" value="uc" checked onchange="search()"> UC</label>
+  <label><input type="checkbox" value="tianyi" checked onchange="search()"> 天翼</label>
+  <label><input type="checkbox" value="123" checked onchange="search()"> 123云盘</label>
+  <label><input type="checkbox" value="pikpak" checked onchange="search()"> PikPak</label>
+</div>
+<div class="results" id="results"><div class="empty"><div class="icon">🔎</div>输入关键词开始搜索</div></div>
+<div class="status" id="status"></div>
+
+<script>
+const HOST = window.location.hostname === 'localhost' ? '192.168.31.237' : window.location.hostname;
+const API = `http://${HOST}:8888/api/search`;
+async function search() {
+  const kw = document.getElementById('kw').value.trim();
+  if (!kw) return;
+  const types = [...document.querySelectorAll('.filters input:checked')].map(c=>c.value);
+  document.getElementById('results').innerHTML = '<div class="loading"><div class="spinner"></div>搜索中...</div>';
+  const t0 = Date.now();
+  try {
+    const res = await fetch(`${API}?kw=${encodeURIComponent(kw)}&res=merge&cloud_types=${types.join(',')}`);
+    const json = await res.json();
+    const data = json.data || json;
+    const merged = data.merged_by_type || {};
+    const total = data.total || 0;
+    document.getElementById('status').textContent = `共 ${total} 条结果 · 耗时 ${((Date.now()-t0)/1000).toFixed(1)}s`;
+    if (!total || !Object.keys(merged).length) {
+      document.getElementById('results').innerHTML = '<div class="empty"><div class="icon">📭</div>未找到结果，换个关键词试试</div>';
+      return;
+    }
+    let html = '';
+    const typeNames = { baidu:'百度网盘', aliyun:'阿里云盘', quark:'夸克', xunlei:'迅雷', '115':'115网盘', uc:'UC网盘', tianyi:'天翼云盘', '123':'123云盘', pikpak:'PikPak', mobile:'中国移动', guangya:'光照', magnet:'磁力链接', ed2k:'电驴', others:'其他' };
+    for (const [type, items] of Object.entries(merged)) {
+      if (!items.length) continue;
+      html += `<div class="type-section"><div class="type-title">📁 ${typeNames[type]||type} <span class="count">${items.length}条</span></div>`;
+      for (const item of items.slice(0, 20)) {
+        const url = item.url || '';
+        const pwd = item.password || '';
+        const note = item.note || item.title || '';
+        const time = (item.datetime || '').slice(0,10);
+        html += `<div class="card">
+          <div class="title"><a href="${url}" target="_blank">${note||url}</a>${pwd?` <span class="pwd">密码:${pwd}</span>`:''}</div>
+          <div class="meta"><span>🕐 ${time||'未知'}</span><span>📡 ${(item.source||'').replace('tg:','')}</span></div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+    document.getElementById('results').innerHTML = html;
+  } catch(e) {
+    document.getElementById('results').innerHTML = `<div class="empty"><div class="icon">❌</div>连接失败：请确认 Docker 容器正常运行<br><small>${e.message}</small></div>`;
+  }
+}
+</script>
+</body>
+</html>
