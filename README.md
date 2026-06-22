@@ -8,7 +8,8 @@
 
 ```
 ├── frontend/dist/
-│   ├── index.html              # 凌云搜索主页 (pan.okva.cc)
+│   ├── index.html              # 凌云搜索 (pan.okva.cc)
+│   │                           首页搜索 + 结果筛选/卡片/高亮
 │   └── assets/                 # JS/CSS/图标
 ├── docker-compose.yml          # Docker 一键部署
 ├── start.sh                    # 启动脚本 (含 Tunnel)
