@@ -197,7 +197,8 @@ async function doSearch(){
   document.getElementById('emptyArea').classList.add('hidden');
   history.pushState({kw},'','?q='+encodeURIComponent(kw));
   try{
-    const res=await fetch('/api/search?kw='+encodeURIComponent(kw));
+    const base=location.hostname==='meshbit.github.io'?'https://pan.okva.cc':'';
+    const res=await fetch(base+'/api/search?kw='+encodeURIComponent(kw));
     const json=await res.json();
     if(json.code!==0)throw new Error('API error');
     allData=json.data.merged_by_type||{};
