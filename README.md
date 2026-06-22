@@ -9,8 +9,6 @@
 ```
 ├── frontend/dist/
 │   ├── index.html              # 凌云搜索主页 (pan.okva.cc)
-│   ├── pansou-qianfan.html     # 千帆风格备用
-│   ├── pansou-search.html      # 搜索风格前端
 │   └── assets/                 # JS/CSS/图标
 ├── docker-compose.yml          # Docker 一键部署
 ├── start.sh                    # 启动脚本 (含 Tunnel)
