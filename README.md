@@ -8,24 +8,24 @@
 
 ```
 ├── frontend/dist/
-│   ├── index.html              # 千帆风格主页 (pan.okva.cc)
-│   ├── pansou-qianfan.html     # 千帆风格备用前端
+│   ├── index.html              # 凌云搜索主页 (pan.okva.cc)
+│   ├── pansou-qianfan.html     # 千帆风格备用
 │   ├── pansou-search.html      # 搜索风格前端
 │   └── assets/                 # JS/CSS/图标
 ├── docker-compose.yml          # Docker 一键部署
 ├── start.sh                    # 启动脚本 (含 Tunnel)
 ├── healthcheck.sh              # 健康检查
 ├── .env.example                # 环境变量模板
-└── pansou.env                  # 渠道/插件配置 (加密)
+└── pansou.env                  # 渠道/插件配置
 ```
 
 ## 功能特性
 
-- 🔍 搜索框 + 13 种网盘类型下拉筛选
-- 🏷️ 20+ 热门标签快捷搜索
-- 📂 搜索结果按网盘类型分类切换
-- 📋 一键复制链接 + 密码弹窗
-- 🌓 双风格前端 (千帆 / 搜索)
+- 🔍 搜索框 + 8 种网盘类型下拉筛选（官方图标）
+- 🏷️ 18 个热门标签快捷搜索
+- 📂 搜索结果：网盘类型筛选 + 文件类型筛选 + 关键词高亮
+- 📋 一键复制链接/密码
+- 🌓 暗黑模式切换
 - 📱 手机自适应
 - 🌐 Cloudflare Tunnel 公网访问
 
