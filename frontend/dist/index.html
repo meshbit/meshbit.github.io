@@ -198,10 +198,28 @@ async function doSearch(){
   history.pushState({kw},'','?q='+encodeURIComponent(kw));
   try{
     const base=location.hostname==='meshbit.github.io'?'https://pan.okva.cc':'';
-    const res=await fetch(base+'/api/search?kw='+encodeURIComponent(kw));
-    const json=await res.json();
-    if(json.code!==0)throw new Error('API error');
-    allData=json.data.merged_by_type||{};
+    // 并行查询 PanSou + 爬虫 (爬虫仅在可访问时使用)
+    const [res1, res2] = await Promise.allSettled([
+      fetch(base+'/api/search?kw='+encodeURIComponent(kw)),
+      fetch(base.replace('8080','5000')+'/api/search?kw='+encodeURIComponent(kw))
+    ]);
+    const getJson = async r => r.status==='fulfilled'&&r.value.ok ? r.value.json() : {code:-1,data:{merged_by_type:{}}};
+    const [json1, json2] = await Promise.all([getJson(res1), getJson(res2)]);
+    
+    // 合并结果
+    const merged = {};
+    [json1, json2].forEach(json => {
+      const data = json.data?.merged_by_type || json.data || {};
+      Object.entries(data).forEach(([type, items]) => {
+        if (Array.isArray(items)) {
+          if (!merged[type]) merged[type] = [];
+          // 去重
+          const existing = new Set(merged[type].map(i => i.url));
+          items.forEach(item => { if (!existing.has(item.url)) { merged[type].push(item); existing.add(item.url); } });
+        }
+      });
+    });
+    allData = merged;
     if(searchPan!=='all'&&PAN_MAP[searchPan]){const t=PAN_MAP[searchPan];allData=allData[t]?{[t]:allData[t]}:{}}
     renderTypeTabs();renderResults();
   }catch(e){document.getElementById('loadingArea').classList.add('hidden');document.getElementById('emptyArea').classList.remove('hidden')}
