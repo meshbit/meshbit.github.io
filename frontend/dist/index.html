@@ -22,6 +22,7 @@ body{width:100%;height:100%;padding:0;margin:0;font-size:14px;font-family:Roboto
 .filter-btn{padding:5px 14px;font-size:12px;border:1px solid #dadce0;border-radius:4px;background:#fff;color:#3c4043;cursor:pointer;transition:all .2s}
 .filter-btn:hover{border-color:#fbbc04;color:#fbbc04}
 .filter-btn.active{background:#fbbc04;color:#202124;border-color:#fbbc04}
+.result-card{word-wrap:break-word;overflow-wrap:break-word;max-width:100%}
 @media(max-width:634px){.index-title img{width:56px}.index-title h1{font-size:36px;line-height:56px;margin-left:12px}.index-des{padding:0 32px}.index-search-form{margin-top:24px}.search-item{margin-bottom:28px}.search-title{font-size:16px}}
 </style>
 </head>
@@ -29,7 +30,7 @@ body{width:100%;height:100%;padding:0;margin:0;font-size:14px;font-family:Roboto
 
 <div id="homePage">
   <header class="index-header">
-    <div class="index-nav"><ul><li><a class="btn-line-normal btn" href="https://img.okva.cc" target="_blank">🖼️ 图片站</a></li><li><a class="btn-line-normal btn" href="https://chat.okva.cc" target="_blank">💬 AI 聊天</a></li></ul></div>
+    <div class="index-nav"><ul id="navLinks"><li><a class="btn-line-normal btn" href="https://img.okva.cc" target="_blank">🖼️ 图片站</a></li><li><a class="btn-line-normal btn" href="https://chat.okva.cc" target="_blank">💬 AI 聊天</a></li></ul></div>
     <button class="index-share-feedback share-feedback btn-full" onclick="showFeedback()">分享投稿</button>
   </header>
   <div class="index-main-container">
@@ -44,7 +45,7 @@ body{width:100%;height:100%;padding:0;margin:0;font-size:14px;font-family:Roboto
         <svg viewBox="0 0 100 100" style="width:56px;display:inline-block;vertical-align:middle"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#fbbc04"/><stop offset="100%" stop-color="#fb6000"/></linearGradient></defs><circle cx="50" cy="50" r="46" fill="url(#g)"/><text x="50" y="62" text-anchor="middle" fill="#fff" font-size="44" font-weight="700">云</text></svg>
         <h1>凌云搜索</h1>
       </div>
-      <div class="index-des"><em>10000000+</em>&nbsp;网盘资源免费无偿分享，坚持做最好的网盘搜索引擎</div>
+      <div class="index-des" id="indexSlogan">全网网盘链接实现秒级检索，精益求精做最硬核的搜盘神器！</div>
       <div class="index-search-form">
         <form onsubmit="return false">
           <input type="text" name="pan" class="search-pan-selected" value="all" id="panInput">
@@ -81,7 +82,7 @@ body{width:100%;height:100%;padding:0;margin:0;font-size:14px;font-family:Roboto
     </div>
   </div>
   <div class="footer index-footer">
-    <span class="footer-spider-tips">声明：本站内容由网络爬虫自动抓取。本站不储存、复制、传播任何文件，仅作个人公益学习。</span>
+    <span class="footer-spider-tips" id="indexFooter">声明：本站内容由网络爬虫自动抓取。本站不储存、复制、传播任何文件，仅作个人公益学习。</span>
     <div style="text-align:center;margin-top:4px"><span class="footer-spider-tips">Copyright &copy; 2026 凌云搜索 All Rights Reserved.</span></div>
   </div>
   <div class="side-tool">
@@ -93,7 +94,7 @@ body{width:100%;height:100%;padding:0;margin:0;font-size:14px;font-family:Roboto
 <!-- ===== RESULTS (Tailwind) ===== -->
 <div id="resultsPage" style="display:none">
   <header class="sticky top-0 z-50 bg-white/80 backdrop-blur border-b border-gray-200">
-    <div class="max-w-6xl mx-auto px-4 h-14 flex items-center gap-4" style="padding-left:0">
+    <div class="max-w-6xl mx-auto px-2 sm:px-4 h-14 flex items-center gap-2 sm:gap-4">
       <a href="javascript:void(0)" onclick="goHome()" class="flex items-center gap-2 flex-shrink-0 text-lg font-bold">
         <span class="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg flex items-center justify-center text-white text-sm font-bold">云</span>
         <span class="text-gray-900">凌云<span class="text-amber-500">搜索</span></span>
@@ -104,10 +105,9 @@ body{width:100%;height:100%;padding:0;margin:0;font-size:14px;font-family:Roboto
           <button onclick="doSearch()" class="text-amber-500 font-medium text-sm flex-shrink-0">搜索</button>
         </div>
       </div>
-      <button onclick="document.body.classList.toggle('dark-mode')" class="text-gray-500 text-sm">🌓</button>
     </div>
   </header>
-  <main class="max-w-6xl mx-auto px-4 py-6">
+  <main class="max-w-6xl mx-auto px-4 py-6" style="overflow-x:hidden">
     <p class="text-sm text-gray-500 mb-4" id="resultsStats"></p>
     <div class="space-y-3 mb-6">
       <div class="flex items-center gap-2 flex-wrap"><span class="text-xs text-gray-400">网盘：</span><div class="flex gap-1.5 flex-wrap" id="typeFilters"></div></div>
@@ -193,6 +193,8 @@ async function doSearch(){
   document.getElementById('resultsPage').style.display='block';
   document.getElementById('loadingArea').classList.remove('hidden');
   document.getElementById('resultsList').innerHTML='';
+  document.getElementById('resultsStats').innerHTML='';
+  document.getElementById('typeFilters').innerHTML='';
   document.getElementById('pagination').innerHTML='';
   document.getElementById('emptyArea').classList.add('hidden');
   history.pushState({kw},'','?q='+encodeURIComponent(kw));
@@ -242,11 +244,16 @@ function renderResults(){
   list.innerHTML=pageItems.map(item=>{
     const t=item._t||'',url=item.url||'',pwd=item.password||'',note=item.note||url||'无描述',date=item._dt?item._dt.toLocaleDateString('zh-CN'):'';
     const ft=item._ft||'other';
-    return`<div class="bg-white rounded-xl border border-gray-100 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+    // 标题取前50字，其余小字展示
+    const noteClean=note.replace(/<[^>]*>/g,'');
+    const title=noteClean.length>50?noteClean.slice(0,50)+'...':noteClean;
+    const desc=noteClean.length>50?noteClean:'';
+    return`<div class="result-card bg-white rounded-xl border border-gray-100 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
       <div class="flex items-start gap-3">
         <span class="text-xl flex-shrink-0 mt-0.5">${FILE_ICONS[ft]||'📁'}</span>
         <div class="flex-1 min-w-0">
-          <a href="${esc(url)}" target="_blank" rel="nofollow" class="text-base font-semibold text-gray-900 hover:text-amber-500 transition line-clamp-2">${highlight(searchKW,note)}</a>
+          <a href="${esc(url)}" target="_blank" rel="nofollow" class="text-base font-semibold text-gray-900 hover:text-amber-500 transition">${highlight(searchKW,title)}</a>
+          ${desc?`<p class="text-xs text-gray-500 mt-1 line-clamp-3">${highlight(searchKW,desc)}</p>`:''}
           <div class="flex items-center gap-2 mt-2 flex-wrap">
             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-600">${TYPE_ICONS[t]||''} ${TYPE_MAP[t]||t}</span>
             ${date?`<span class="text-xs text-gray-400">${date}</span>`:''}
@@ -254,8 +261,8 @@ function renderResults(){
           </div>
         </div>
         <div class="flex flex-col gap-2 flex-shrink-0">
-          <button onclick="copyText('${esc(url)}',this)" class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:border-amber-400 hover:text-amber-500 transition whitespace-nowrap">📋 复制</button>
-          <a href="${esc(url)}" target="_blank" class="text-xs bg-amber-500 text-white rounded-lg px-3 py-1.5 text-center hover:bg-amber-600 transition whitespace-nowrap">打开</a>
+          <button onclick="copyText('${esc(url)}',this)" class="text-xs border border-gray-200 rounded-lg px-2 py-1 sm:px-3 sm:py-1.5 text-gray-600 hover:border-amber-400 hover:text-amber-500 transition whitespace-nowrap">📋 复制</button>
+          <a href="${esc(url)}" target="_blank" class="text-xs bg-amber-500 text-white rounded-lg px-2 py-1 sm:px-3 sm:py-1.5 text-center hover:bg-amber-600 transition whitespace-nowrap">打开</a>
         </div>
       </div>
     </div>`;
@@ -276,6 +283,18 @@ function copyText(text,btn){navigator.clipboard.writeText(text).then(()=>{const 
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.opacity='1';t.style.pointerEvents='auto';setTimeout(()=>{t.style.opacity='0';t.style.pointerEvents='none'},1800)}
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function showFeedback(){toast('投稿请联系：admin@okva.cc')}
+// 动态加载导航链接
+fetch('/api/navlinks').then(r=>r.json()).then(links=>{
+  var h='';
+  links.forEach(l=>{h+='<li><a class="btn-line-normal btn" href="'+l.url+'" target="_blank">'+l.text+'</a></li>'});
+  document.getElementById('navLinks').innerHTML=h;
+}).catch(()=>{});
+// 动态加载标语和Logo
+fetch('/admin/api/config').then(r=>r.json()).then(d=>{
+  if(d.slogan) document.getElementById('indexSlogan').textContent=d.slogan;
+  if(d.logo) document.querySelector('.index-title text').textContent=d.logo;
+  if(d.footer) document.getElementById('indexFooter').textContent=d.footer;
+}).catch(()=>{});
 </script>
 </body>
 </html>
