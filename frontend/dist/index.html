@@ -231,6 +231,7 @@ function applyFileFilter(ft,btn){currentFileType=ft;currentPage=1;document.query
 function renderResults(){
   document.getElementById('loadingArea').classList.add('hidden');
   const items=getFilteredItems();
+  items.sort((a,b)=>new Date(b.datetime||0)-new Date(a.datetime||0)); // 最新优先
   const totalPages=Math.ceil(items.length/PER_PAGE);
   const pageItems=items.slice((currentPage-1)*PER_PAGE,currentPage*PER_PAGE);
   const typeLabel=currentType==='all'?'':(TYPE_MAP[currentType]||currentType)+' ';
