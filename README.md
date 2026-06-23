@@ -16,11 +16,36 @@
 ## 项目结构
 
 ```
+凌云搜索/
 ├── frontend/dist/
-│   └── index.html          # 凌云搜索前端
+│   └── index.html              # 凌云搜索前端（唯一页面，含首页+搜索页）
 ├── proxy/
-│   └── main.go             # Go 代理源码
+│   ├── main.go                 # Go 代理源码
+│   └── proxy.exe               # Go 代理编译产物 (9MB)
+├── scraper/
+│   ├── social.py               # 社交爬虫框架 (7平台)
+│   └── browser.py              # Playwright 浏览器爬虫
+├── pansou.env                  # PanSou 配置 (174频道+88插件)
+├── D:\proxy\
+│   ├── auth.json               # 后台登录密码
+│   ├── ads.json                # 首页广告配置
+│   ├── nav.json                # 导航链接配置
+│   ├── subs.json               # 用户投稿数据
+│   ├── link_status.json        # 链接失效检测结果
+│   └── site_config.json        # 站点配置 (标语/Logo/底部)
 └── README.md
+```
+
+## 架构图
+
+```
+用户浏览器
+    ↓
+Cloudflare Tunnel (pan.okva.cc)
+    ↓
+Go 代理 (:8080) ← 10分钟缓存 + 失效链接过滤
+    ↓
+PanSou Docker (:8081) ← 174个TG频道 + 88个爬虫插件
 ```
 
 ## 部署
@@ -45,7 +70,7 @@
 
 | 页面 | 路径 | 说明 |
 |---|---|---|
-| 首页 | `/` | 皮卡风格搜索主页 |
+| 首页 | `/` | 凌云搜索首页 |
 | 搜索页 | `/?q=关键词` | Tailwind 卡片式搜索结果 |
 | 后台 | `/admin/` | 8模块管理系统 |
 | 登录 | `/login.html` | 后台登录页 |
