@@ -285,6 +285,18 @@ func main() {
 	})
 	mux.HandleFunc("/admin/api/navlinks", navlinksAPI)
 	mux.HandleFunc("/api/navlinks", navlinksAPI)
+	// 代理 likeness 应用
+	mux.HandleFunc("/likeness/", func(w http.ResponseWriter, r *http.Request) {
+		target := r.URL.Path[len("/likeness"):]
+		if target == "" { target = "/" }
+		proxyURL := "http://localhost:3001" + target + "?" + r.URL.RawQuery
+		resp, err := http.Get(proxyURL)
+		if err != nil { http.Error(w, "likeness offline", 502); return }
+		defer resp.Body.Close()
+		for k, v := range resp.Header { for _, vv := range v { w.Header().Add(k, vv) } }
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+	})
 	mux.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {
 		if !checkAuth(w, r) { http.Redirect(w, r, "/login.html", 302); return }
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -294,7 +306,7 @@ func main() {
 	fs := http.FileServer(http.Dir(abs))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/admin") { return }
+		if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/admin") || strings.HasPrefix(path, "/likeness") { return }
 		fp := filepath.Join(abs, path)
 		if info, err := os.Stat(fp); err == nil && !info.IsDir() { fs.ServeHTTP(w, r); return }
 		http.ServeFile(w, r, filepath.Join(abs, "index.html"))
