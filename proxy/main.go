@@ -33,7 +33,7 @@ type Stat struct{ Ch, Pl, Ca, Se int; Up string }
 var (
 	cache   = map[string]*CE{}
 	cacheMu sync.RWMutex
-	psURL   = "http://localhost:8081/api/search"
+	psURL   = "http://localhost:5003/api/search"
 	start   = time.Now()
 	sc      int
 	scMu    sync.Mutex

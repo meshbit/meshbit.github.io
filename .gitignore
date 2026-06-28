@@ -3,6 +3,21 @@ data/cache/
 data/logs/
 data/ssl/
 
-# Docker
-*.log
+# Docker 持久化数据 (不进版本库)
+mysql_data/
+es_data/
+
+# 爬虫缓存与日志
+scraper/*.db
+scraper/*.log
+scraper/meilisearch_data/
+scraper/__pycache__/
+**/*.pyc
+
+# 环境变量
 .env
+*.env
+
+# 构建产物
+proxy/proxy.exe
+*.exe
