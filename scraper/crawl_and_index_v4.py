@@ -1,6 +1,6 @@
 """
 凌云搜索 - 定时爬虫 v4 (async)
-七项全改版: asyncio并行 + aiohttp异步 + 随机节奏 + 三写MySQL/ES/Meili
+七项全改版: asyncio并行 + aiohttp异步 + 随机节奏 + 双写MySQL/Meili
 """
 import asyncio, aiohttp, json, hashlib, time, os, random
 from concurrent.futures import ThreadPoolExecutor
@@ -13,7 +13,6 @@ os.environ['HTTPS_PROXY'] = ''
 MEILI_URL = 'http://127.0.0.1:7700'
 MEILI_KEY = '5078ead29c1a6784d1b43ae67dfb1c4b17af875100bb14cb37a85dc4bbbeed03'
 PROXY_API = 'http://localhost:5003/api/search'
-ES_URL = 'http://127.0.0.1:9200'
 
 # ============================================================
 # 7. 章节级并行 — 关键词同时开工
@@ -143,7 +142,7 @@ async def save_to_mysql(docs):
     return await asyncio.get_event_loop().run_in_executor(executor, save_to_mysql_sync, docs)
 
 # ============================================================
-# 6. aiohttp 三写 — Meili + ES 异步
+# 6. aiohttp 双写 — Meili 异步
 # ============================================================
 async def save_to_meili(session, docs):
     if not docs: return 0
@@ -156,24 +155,9 @@ async def save_to_meili(session, docs):
         print(f'  [Meili] ERR: {e}', flush=True)
         return 0
 
-async def save_to_es(session, docs):
-    if not docs: return 0
-    try:
-        body = ''
-        for doc in docs:
-            action = json.dumps({"index": {"_index": "resources", "_id": doc['url_hash']}})
-            source = {k: doc[k] for k in ('url','note','password','type','keyword','datetime') if k in doc}
-            body += action + '\n' + json.dumps(source, ensure_ascii=False) + '\n'
-        async with session.post(f'{ES_URL}/_bulk', data=body.encode('utf-8'),
-                                headers={'Content-Type': 'application/x-ndjson'},
-                                timeout=aiohttp.ClientTimeout(30)) as resp:
-            return len(docs)
-    except Exception as e:
-        print(f'  [ES] ERR: {e}', flush=True)
-        return 0
 
 # ============================================================
-# 核心：单关键词爬取 + 三写
+# 核心
 # ============================================================
 semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
@@ -209,15 +193,12 @@ async def crawl_keyword(session, keyword, idx, total):
                 })
 
         if docs:
-            # 三写并发
+            # 双写并发
             meili_task = save_to_meili(session, docs)
-            es_task = save_to_es(session, docs)
             mysql_task = save_to_mysql(docs)
-
-            meili_n, es_n, mysql_n = await asyncio.gather(meili_task, es_task, mysql_task)
+            meili_n, mysql_n = await asyncio.gather(meili_task, mysql_task)
             elapsed = time.time() - t0
-            pct = f"{idx+1}/{total}"
-            print(f'  [{pct}] {keyword[:12]:12s} Meili:{len(docs)} MySQL:{mysql_n} ES:{es_n} ({elapsed:.1f}s)', flush=True)
+            print(f'  [{idx+1}/{total}] {keyword[:12]:12s} Meili:{len(docs)} MySQL:{mysql_n} ({elapsed:.1f}s)', flush=True)
             return len(docs)
         else:
             print(f'  [{keyword}] 0条', flush=True)
@@ -232,7 +213,7 @@ async def main():
 
     session = _get_session()
 
-    # 检查 MySQL + ES
+    # 检查 MySQL
     try:
         conn = _get_mysql()
         c = conn.cursor()
@@ -243,12 +224,14 @@ async def main():
         print(f'MySQL 连接失败: {e}'); return
 
     try:
-        async with session.get(f'{ES_URL}/resources/_count', timeout=aiohttp.ClientTimeout(5)) as resp:
-            es_data = await resp.json()
-            print(f'ES 现有: {es_data.get("count", "?")}条')
+        async with session.get(f'{MEILI_URL}/indexes/resources/stats',
+                               headers={'Authorization': f'Bearer {MEILI_KEY}'},
+                               timeout=aiohttp.ClientTimeout(5)) as resp:
+            stats = await resp.json()
+            print(f'Meilisearch: {stats.get("numberOfDocuments", "?")} 文档')
     except: pass
 
-    # === 7. 关键词并行 ===
+    # === 关键词并行 ===
     t0 = time.time()
     tasks = [crawl_keyword(session, kw, i, len(HOT_KEYWORDS)) for i, kw in enumerate(HOT_KEYWORDS)]
     total = sum(await asyncio.gather(*tasks))
@@ -264,20 +247,6 @@ async def main():
         cnt, kws = c.fetchone()
         print(f'MySQL: {cnt}条 / {kws}关键词')
         _put_mysql(conn)
-    except: pass
-
-    try:
-        async with session.get(f'{MEILI_URL}/indexes/resources/stats',
-                               headers={'Authorization': f'Bearer {MEILI_KEY}'},
-                               timeout=aiohttp.ClientTimeout(5)) as resp:
-            stats = await resp.json()
-            print(f'Meilisearch: {stats.get("numberOfDocuments", "?")} 文档')
-    except: pass
-
-    try:
-        async with session.get(f'{ES_URL}/resources/_count', timeout=aiohttp.ClientTimeout(5)) as resp:
-            cnt = await resp.json()
-            print(f'Elasticsearch: {cnt.get("count", "?")} 文档')
     except: pass
 
     await session.close()

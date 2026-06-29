@@ -46,20 +46,6 @@ services:
       - ./mysql_data:/var/lib/mysql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
 
-  elasticsearch:
-    image: docker.m.daocloud.io/library/elasticsearch:7.17.25
-    container_name: pansou-es
-    restart: unless-stopped
-    ports:
-      - "9200:9200"
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-      - TZ=Asia/Shanghai
-    volumes:
-      - ./es_data:/usr/share/elasticsearch/data
-
   pansou-redis:
     image: docker.m.daocloud.io/library/redis:7-alpine
     container_name: pansou-redis

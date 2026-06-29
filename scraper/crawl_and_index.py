@@ -1,6 +1,6 @@
 """
 凌云搜索 - 定时爬虫脚本 (v3)
-每天定时拉取热门关键词 → Python Proxy API → Meilisearch + MySQL + Elasticsearch
+每天定时拉取热门关键词 → Python Proxy API → Meilisearch + MySQL
 Session 复用 + 连接池，避免套接字耗尽
 """
 import json, hashlib, time, requests, sys, os
@@ -14,7 +14,6 @@ os.environ['HTTPS_PROXY'] = ''
 MEILI_URL = 'http://127.0.0.1:7700'
 MEILI_KEY = '5078ead29c1a6784d1b43ae67dfb1c4b17af875100bb14cb37a85dc4bbbeed03'
 PROXY_API = 'http://localhost:5003/api/search'
-ES_URL = 'http://127.0.0.1:9200'
 
 # HTTP Session 复用
 _session = None
@@ -108,33 +107,6 @@ def save_to_mysql(docs):
         if conn:
             _put_mysql(conn)
 
-def save_to_es(docs):
-    """Elasticsearch bulk 索引"""
-    if not docs:
-        return 0
-    try:
-        body = ''
-        for doc in docs:
-            action = json.dumps({"index": {"_index": "resources", "_id": doc['url_hash']}})
-            source = {k: doc[k] for k in ('url', 'note', 'password', 'type', 'keyword', 'datetime') if k in doc}
-            body += action + '\n' + json.dumps(source, ensure_ascii=False) + '\n'
-        resp = _get_session().post(
-            f'{ES_URL}/_bulk',
-            data=body.encode('utf-8'),
-            headers={'Content-Type': 'application/x-ndjson'},
-            timeout=30
-        )
-        result = resp.json()
-        if result.get('errors'):
-            err_count = sum(1 for item in result.get('items', []) if 'error' in item.get('index', {}))
-            print(f'  [ES] 部分失败: {err_count}/{len(docs)}', flush=True)
-        else:
-            print(f'  [ES] {len(docs)}条', flush=True)
-        return len(docs)
-    except Exception as e:
-        print(f'  [ES] ERROR: {e}', flush=True)
-        return 0
-
 def search_and_index(keyword):
     try:
         session = _get_session()
@@ -174,10 +146,7 @@ def search_and_index(keyword):
             # MySQL 入库
             mysql_count = save_to_mysql(docs)
 
-            # ES 入库
-            es_count = save_to_es(docs)
-
-            print(f'  [{keyword}] Meili:{len(docs)} MySQL:{mysql_count} ES:{es_count}')
+            print(f'  [{keyword}] Meili:{len(docs)} MySQL:{mysql_count}')
             session.close()
             return len(docs)
         else:
@@ -186,36 +155,6 @@ def search_and_index(keyword):
     except Exception as e:
         print(f'  [{keyword}] ERR: {e}')
         return 0
-
-def backfill_es_from_mysql():
-    """从 MySQL 全量回填 ES"""
-    print('=== ES 回填: MySQL → ES ===')
-    conn = _get_mysql()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM resources")
-    total_rows = cursor.fetchone()[0]
-    cursor.execute("SELECT url, url_hash, note, password, type, keyword, datetime FROM resources")
-    
-    batch = []
-    count = 0
-    for row in cursor:
-        url, url_hash, note, pwd, ptype, kw, dt = row
-        batch.append({
-            'url_hash': url_hash, 'url': url,
-            'note': note or '', 'password': pwd or '',
-            'type': ptype or 'others', 'keyword': kw or '',
-            'datetime': str(dt) if dt else '',
-        })
-        if len(batch) >= 500:
-            count += save_to_es(batch)
-            batch = []
-            time.sleep(0.5)
-    if batch:
-        count += save_to_es(batch)
-    
-    cursor.close()
-    _put_mysql(conn)
-    print(f'=== ES 回填完成: {count}/{total_rows} ===')
 
 def main():
     print(f'=== 凌云爬虫 v3 {time.strftime("%Y-%m-%d %H:%M:%S")} ===')
@@ -232,41 +171,33 @@ def main():
         print(f'MySQL 连接失败: {e}')
         return
 
-    # ES 回填 (如果是首次运行，ES 数据少)
-    try:
-        es_count = requests.get(f'{ES_URL}/resources/_count', timeout=5).json().get('count', 0)
-        print(f'ES 现有: {es_count}条')
-        if es_count < total:
-            backfill_es_from_mysql()
-    except Exception as e:
-        print(f'ES 连接失败: {e}')
-
-    total = 0
-    for i, kw in enumerate(HOT_KEYWORDS):
-        total += search_and_index(kw)
-        time.sleep(3 if i % 5 != 0 else 5)
-
-    print(f'=== 完成: {total}条入库 ===')
-
-    # 统计
-    try:
-        conn = _get_mysql()
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*), COUNT(DISTINCT keyword) FROM resources")
-        cnt, kws = c.fetchone()
-        print(f'MySQL 总计: {cnt}条 / {kws}关键词')
-        _put_mysql(conn)
-    except: pass
-
+    # 检查 Meilisearch
     try:
         stats = requests.get(f'{MEILI_URL}/indexes/resources/stats',
             headers={'Authorization': f'Bearer {MEILI_KEY}'}, timeout=5).json()
         print(f'Meilisearch: {stats.get("numberOfDocuments", "?")} 文档')
     except: pass
 
+    total_new = 0
+    for i, kw in enumerate(HOT_KEYWORDS):
+        print(f'[{i+1}/{len(HOT_KEYWORDS)}]', end=' ', flush=True)
+        total_new += search_and_index(kw)
+
+    print(f'\n=== 完成: 新增 {total_new} 条 ===')
+
+    # 最终统计
     try:
-        cnt = requests.get(f'{ES_URL}/resources/_count', timeout=5).json().get('count', '?')
-        print(f'Elasticsearch: {cnt} 文档')
+        conn = _get_mysql()
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM resources")
+        print(f'MySQL 总量: {c.fetchone()[0]}条')
+        _put_mysql(conn)
+    except: pass
+
+    try:
+        stats = requests.get(f'{MEILI_URL}/indexes/resources/stats',
+            headers={'Authorization': f'Bearer {MEILI_KEY}'}, timeout=5).json()
+        print(f'Meilisearch 总量: {stats.get("numberOfDocuments", "?")} 文档')
     except: pass
 
 if __name__ == '__main__':

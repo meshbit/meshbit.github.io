@@ -40,25 +40,25 @@
 │                                                              │
 │  搜索优先级:                                                  │
 │   1️⃣ SQLite 缓存 (0ms, 命中直接返回)                         │
-│   2️⃣ MySQL + ES 快速路径 (ms, ≥50条秒回)                     │
-│   3️⃣ Meilisearch 补充 (ms, 200K索引)                        │
+│   2️⃣ MySQL 快速路径 (ms, ≥50条秒回)                          │
+│   3️⃣ Meilisearch 补充 (ms, 198K索引)                        │
 │   4️⃣ PanSou 实时降级 (~4s, 最后兜底)                        │
 │                                                              │
-│  ┌─────────┐  ┌─────────┐  ┌──────────────┐  ┌───────────┐  │
-│  │ MySQL   │  │ ES 7.17 │  │ Meilisearch  │  │ PanSou    │  │
-│  │ :3307   │  │ :9200   │  │ :7700        │  │ :8081     │  │
-│  │ 8.3K行  │  │ 8.3K文档│  │ 200K 文档    │  │ 174频道   │  │
-│  └────┬────┘  └────┬────┘  └──────┬───────┘  │ 88插件    │  │
-│       │            │              │           └───────────┘  │
-│       └────────────┴──────────────┘                          │
-│                    ▲ 只读                                    │
-│                    │                                         │
-│              ┌─────┴─────┐                                   │
-│              │ 爬虫 v3   │ (每6h定时)                        │
-│              │ 三写      │                                   │
-│              │ MySQL+ES  │                                   │
-│              │ +Meili    │                                   │
-│              └───────────┘                                   │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────┐            │
+│  │ MySQL       │  │ Meilisearch  │  │ PanSou    │            │
+│  │ :3307       │  │ :7700        │  │ :8081     │            │
+│  │ 198K行      │  │ 198K 文档    │  │ 174频道   │            │
+│  └──────┬──────┘  └──────┬───────┘  │ 88插件    │            │
+│         │                │          └───────────┘            │
+│         └────────────────┘                                   │
+│                  ▲ 只读                                      │
+│                  │                                           │
+│            ┌─────┴─────┐                                     │
+│            │ 爬虫       │ (定时任务)                         │
+│            │ 双写       │                                     │
+│            │ MySQL      │                                     │
+│            │ +Meili     │                                     │
+│            └───────────┘                                     │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -75,9 +75,7 @@
         │
         ├─→ 1. SQLite cache.db ──→ 命中? 返回 (X-Cache: HIT)
         │
-        ├─→ 2. MySQL (LIKE搜索) + ES (multi_match全文)
-        │      │
-        │      └─→ 两库合并去重 ≥ 50条? → 直接返回 (X-Source: mysql+es) ⚡
+        ├─→ 2. MySQL (LIKE搜索) ──→ ≥50条? → 直接返回 (X-Source: mysql) ⚡
         │
         ├─→ 3. Meilisearch 全文索引 ──→ 补充结果
         │
@@ -92,7 +90,7 @@
 |---------|------|---------|
 | Go 内存缓存 | < 10ms | 10分钟内重复搜索 |
 | SQLite 缓存 | < 5ms | 历史搜索过 |
-| MySQL+ES 快速路径 | ~100ms | 数据≥50条 |
+| MySQL 快速路径 | ~100ms | 数据≥50条 |
 | Meilisearch | ~50ms | 补充索引 |
 | PanSou 实时 | ~4s | 未命中本地库 |
 
@@ -101,23 +99,22 @@
 ## ✍️ 写入数据流 (离线预建索引)
 
 ```
-定时任务 (每6小时)
+定时任务
   │
   ▼
-crawl_and_index.py (爬虫 v3)
+爬虫脚本
   │
-  ├─→ 读取 36 个热门关键词
+  ├─→ 读取热门关键词
   │
   ├─→ 调用 Python Proxy API 获取搜索结果
   │
   ├─→ 去重 (按 url_hash)
   │
-  ├─→ 三写:
-  │     ├─→ MySQL   INSERT ... ON DUPLICATE KEY UPDATE
-  │     ├─→ ES      POST /_bulk (NDJSON)
+  ├─→ 双写:
+  │     ├─→ MySQL   INSERT IGNORE / ON DUPLICATE KEY UPDATE
   │     └─→ Meili   POST /indexes/resources/documents
   │
-  └─→ 统计报告 (三库文档数)
+  └─→ 统计报告 (双库文档数)
 ```
 
 ### 读写分离
@@ -126,7 +123,6 @@ crawl_and_index.py (爬虫 v3)
 |------|:---:|:---:|
 | **SQLite** | ✅ 读写 | ❌ 不碰 |
 | **MySQL** | 🔍 只读 | ✍️ 只写 |
-| **ES** | 🔍 只读 | ✍️ 只写 |
 | **Meilisearch** | 🔍 只读 | ✍️ 只写 |
 | **PanSou** | 🔍 只读 | ❌ 不碰 |
 
@@ -144,32 +140,32 @@ crawl_and_index.py (爬虫 v3)
 │   ├── frontend/dist/
 │   │   └── index.html                   # SPA 前端 (首页+搜索)
 │   │
-│   ├── docker-compose.yml               # Docker 编排 (PanSou + MySQL + ES + Redis)
+│   ├── docker-compose.yml               # Docker 编排 (PanSou + MySQL + Redis)
 │   ├── pansou.env                       # PanSou 配置 (频道 + 插件)
 │   │
 │   ├── mysql_data/                      # MySQL 持久化数据 (gitignore)
-│   ├── es_data/                         # Elasticsearch 持久化数据 (gitignore)
 │   └── data/                            # PanSou 运行时数据 (gitignore)
 │
 ├── scraper/                             # Python 爬虫 + 代理
-│   ├── proxy.py                         # Python 搜索代理 (Waitress, 三源合并)
+│   ├── proxy.py                         # Python 搜索代理 (Waitress, 四源合并)
 │   ├── db.py                            # SQLite 缓存读写
-│   ├── crawl_and_index.py              # 主爬虫 (三写: MySQL+ES+Meili)
+│   ├── crawl_and_index.py              # 主爬虫 (双写: MySQL+Meili)
+│   ├── crawl_and_index_v4.py           # 主爬虫 v4 (aiohttp 异步)
 │   ├── expand.py                        # 关键词扩展 (同义词/拼音/简繁)
 │   ├── keyword_factory.py              # 关键词工厂 (热门词生成)
+│   ├── crawler_base.py                 # 爬虫基础框架 (Session/三库写入)
 │   │
-│   ├── warm_crawler.py                 # 预热爬虫
-│   ├── massive_crawler.py              # 大规模爬虫
-│   ├── share_crawler.py                # 分享链接爬虫
-│   ├── sitemap_scraper.py              # 站点地图爬虫
-│   ├── bilibili_scraper.py             # B站爬虫
-│   ├── aikanzy_crawler.py              # 爱看资源爬虫
-│   ├── aikanzy_full.py                 # 爱看全量爬虫
-│   ├── competitor_crawler.py           # 竞品爬虫
+│   ├── community_crawler.py            # 社区爬虫 (V2EX/简书/掘金/少数派/酷安/NGA/吾爱/贴吧/博客园)
+│   ├── docs_crawler.py                 # 文档平台爬虫 (语雀/Notion/飞书/HackMD/腾讯/石墨)
+│   ├── pan_direct.py                   # 网盘直爬 (阿里/夸克/天翼/UC/迅雷/123/蓝奏)
+│   ├── github_crawler.py              # GitHub 爬虫 (Awesome/Issues/Gist)
+│   ├── forum_crawler.py               # 论坛爬虫 (Chiphell/Stage1st/Hostloc)
 │   │
-│   ├── social.py                       # 社交平台爬虫 (7平台)
+│   ├── social.py                       # 社交平台爬虫 (微博/豆瓣/推特)
 │   ├── browser.py                      # Playwright 浏览器自动化
-│   ├── run_all.py                      # 一键启动所有爬虫
+│   ├── massive_crawler.py              # 大规模爬虫
+│   ├── aikanzy_full.py                 # 爱看全量爬虫
+│   ├── bilibili_scraper.py             # B站爬虫
 │   │
 │   ├── keywords_massive.json           # 关键词库 (3MB, 海量词条)
 │   └── cache.db                        # SQLite 搜索缓存
@@ -195,30 +191,30 @@ crawl_and_index.py (爬虫 v3)
 
 ### Python 代理 + 爬虫 (`scraper/`)
 
-| 文件 | 行数 | 说明 |
-|------|------|------|
-| `proxy.py` | 414 | Python 搜索代理，合并 MySQL+ES+Meilisearch+PanSou |
-| `db.py` | 53 | SQLite 缓存 (`save_results` / `query_local`) |
-| `crawl_and_index.py` | 216 | 主爬虫，定时三写 MySQL+ES+Meilisearch |
-| `expand.py` | 180 | 关键词扩展 (简繁/拼音/英文/同义词) |
-| `keyword_factory.py` | 230 | 关键词库生成 (热门/长尾/竞品词) |
-| `social.py` | 520 | 社交平台爬虫 (微博/知乎/贴吧/豆瓣/小红书/B站/抖音) |
-| `browser.py` | 380 | Playwright 浏览器爬虫模板 |
-| `warm_crawler.py` | 480 | 预热爬虫 (保持索引热度) |
-| `massive_crawler.py` | 180 | 大规模批量爬虫 |
-| `share_crawler.py` | 300 | 分享链接抓取器 |
-| `sitemap_scraper.py` | 180 | 站点地图爬虫 |
-| `bilibili_scraper.py` | 160 | B站专项爬虫 |
-| `aikanzy_crawler.py` | 120 | 爱看资源站爬虫 |
-| `aikanzy_full.py` | 170 | 爱看全量采集 |
-| `competitor_crawler.py` | 70 | 竞品数据采集 |
-| `run_all.py` | 30 | 一键启动所有爬虫 |
+| 文件 | 说明 |
+|------|------|
+| `proxy.py` | Python 搜索代理，合并 MySQL+Meilisearch+PanSou |
+| `db.py` | SQLite 缓存 (`save_results` / `query_local`) |
+| `crawl_and_index.py` | 主爬虫，定时双写 MySQL+Meilisearch |
+| `crawl_and_index_v4.py` | 主爬虫 v4，aiohttp 异步并行 |
+| `crawler_base.py` | 爬虫基础框架 (Session管理/去重/双写) |
+| `community_crawler.py` | 社区平台爬虫 (9个社区) |
+| `docs_crawler.py` | 文档平台爬虫 (6个平台) |
+| `pan_direct.py` | 网盘直爬 (7个平台) |
+| `github_crawler.py` | GitHub 资源爬虫 |
+| `forum_crawler.py` | 论坛爬虫 (3个论坛) |
+| `expand.py` | 关键词扩展 (简繁/拼音/英文/同义词) |
+| `social.py` | 社交平台爬虫 (微博/豆瓣/推特) |
+| `browser.py` | Playwright 浏览器爬虫模板 |
+| `massive_crawler.py` | 大规模批量爬虫 |
+| `aikanzy_full.py` | 爱看全量采集 |
+| `bilibili_scraper.py` | B站专项爬虫 |
 
 ### 配置文件
 
 | 文件 | 路径 | 说明 |
 |------|------|------|
-| `docker-compose.yml` | `pansou-repo/` | 4个Docker服务编排 |
+| `docker-compose.yml` | `pansou-repo/` | 3个Docker服务编排 |
 | `pansou.env` | `pansou-repo/` | PanSou 频道+插件列表 |
 | `auth.json` | `D:\proxy\` | 后台密码 (默认: admin123) |
 | `ads.json` | `D:\proxy\` | 首页广告位 |
@@ -236,26 +232,34 @@ crawl_and_index.py (爬虫 v3)
 | 容器名 | 镜像 | 端口 | 说明 |
 |--------|------|------|------|
 | `pansou` | `ghcr.io/fish2018/pansou-web` | 8081:80 | PanSou 搜索引擎 |
-| `pansou-mysql` | `mysql:8.0` | 3307:3306 | 本地资源仓库 |
-| `pansou-es` | `elasticsearch:7.17.25` | 9200:9200 | 全文搜索索引 |
+| `pansou-mysql` | `mysql:8.0` | 3307:3306 | 本地资源仓库 (198K) |
 | `pansou-redis` | `redis:7-alpine` | 6380:6379 | 缓存/队列 (备用) |
 
 ### 外部服务
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| **Meilisearch** | 7700 | Windows 原生运行，搜索引擎 |
+| **Meilisearch** | 7700 | Windows 原生运行，搜索引擎 (198K docs) |
 | **Go 代理** | 8080 | 编译为 proxy.exe，反向代理 |
 | **Python Proxy** | 5003 | Waitress WSGI 服务器，搜索合并引擎 |
 | **Cloudflare Tunnel** | — | 内网穿透，公网访问 pan.okva.cc |
-| **nginx** | 80 | 备用 (历史遗留) |
 
-### 定时任务
+### 定时任务 (全部 no_agent 零 token)
 
 | 任务 | 频率 | 脚本 |
 |------|------|------|
-| 凌云爬虫 | 每 6 小时 | `python crawl_and_index.py` |
-| 链接检测 | 每天 03:00 | Go 代理内置 |
+| 凌云爬虫 | 每 6 小时 | `crawl_and_index_v4.py` |
+| 海量爬虫 | 每天 00:00 | `massive_crawler.py` |
+| 社区爬虫 | 每 2 小时 | `community_crawler.py` |
+| 网盘直爬 | 每 2 小时 | `pan_direct.py` |
+| 文档全量 | 每 2 小时 | `docs_crawler.py` |
+| 论坛爬虫 | 每 6 小时 | `forum_crawler.py` |
+| GitHub 批量 | 每 12 小时 | `github_crawler.py` |
+| 爱看全站 | 每 6 小时 | `aikanzy_full.py` |
+| B站抓取 | 每天 05:00 | `bilibili_scraper.py` |
+| 竞品Sitemap | 每 12 小时 | sitemap |
+| PanSou预热 | 每 6 小时 | 全品类预热 |
+| 链接检测 | 每天 03:00 | 失效链接检测 |
 
 ---
 
@@ -302,7 +306,7 @@ crawl_and_index.py (爬虫 v3)
 | Header | 值 | 说明 |
 |--------|-----|------|
 | `X-Cache` | `HIT 2ms` | SQLite 缓存命中 |
-| `X-Source` | `mysql+es` | MySQL+ES 快速路径命中 |
+| `X-Source` | `mysql` | MySQL 快速路径命中 |
 | `Server` | `waitress` | Python 代理 |
 
 ---
@@ -313,17 +317,16 @@ crawl_and_index.py (爬虫 v3)
 
 - Windows 10/11 (x64)
 - Docker Desktop
-- Python 3.11+ (`pip install waitress pymysql requests`)
-- Go 1.22+ (编译代理)
+- Python 3.11+ (`pip install waitress pymysql requests aiohttp`)
 - Meilisearch (Windows 原生)
 - Cloudflare Tunnel (公网访问)
 
 ### 1. 启动 Docker 服务
 
 ```bash
-cd D:\pansou-repo
+cd D:\网站\凌云搜索
 docker compose up -d
-# 启动: PanSou + MySQL + ES + Redis
+# 启动: PanSou + MySQL + Redis
 ```
 
 ### 2. 初始化 MySQL 表
@@ -350,7 +353,7 @@ CREATE TABLE IF NOT EXISTS resources (
 ### 3. 启动 Python 代理
 
 ```bash
-cd D:\scraper
+cd D:\网站\凌云搜索\scraper
 python proxy.py
 # Waitress 生产模式: threads=8, conn_limit=100
 ```
@@ -358,21 +361,20 @@ python proxy.py
 ### 4. 编译并启动 Go 代理
 
 ```bash
-cd D:\pansou-repo\proxy
+cd D:\网站\凌云搜索\pansou-repo\proxy
 go build -o proxy.exe main.go
 
 # Windows 启动
 set PORT=8080
-set STATIC_DIR=D:\pansou-repo\frontend\dist
+set STATIC_DIR=D:\网站\凌云搜索\pansou-repo\frontend\dist
 proxy.exe
 ```
 
 ### 5. 运行爬虫 (首次)
 
 ```bash
-cd D:\scraper
-python crawl_and_index.py
-# 首次运行自动回填 ES (从 MySQL 全量同步)
+cd D:\网站\凌云搜索\scraper
+python crawl_and_index_v4.py
 ```
 
 ### 6. Cloudflare Tunnel
@@ -396,47 +398,38 @@ ingress:
 ```bash
 # 服务健康
 curl http://localhost:5003/api/health
-# {"elasticsearch":"connected","meilisearch":"connected","mysql":"connected","status":"ok"}
+# {"meilisearch":"connected","mysql":"connected","status":"ok"}
 
 # 数据统计
 docker exec pansou-mysql mysql -uroot -ppansearch123 -e "SELECT COUNT(*) FROM pansearch.resources;"
-curl http://localhost:9200/resources/_count
-curl http://localhost:7700/indexes/resources/stats -H "Authorization: Bearer <key>"
+curl http://localhost:7700/indexes/resources/stats -H "Authorization: Bearer ***"
 ```
 
 ### 添加搜索关键词
 
-编辑 `scraper/crawl_and_index.py` 中的 `HOT_KEYWORDS` 列表。
+编辑 `scraper/crawl_and_index_v4.py` 中的 `HOT_KEYWORDS` 列表。
 
 ### 清缓存
 
 ```bash
 # 清 Python 代理缓存
-rm D:\scraper\cache.db
+rm D:\网站\凌云搜索\scraper\cache.db
 
 # 清 Go 代理内存缓存
 curl http://localhost:8080/admin/api/cache/clear
 ```
 
-### 手动回填 ES
-
-```bash
-cd D:\scraper
-python -c "from crawl_and_index import backfill_es_from_mysql; backfill_es_from_mysql()"
-```
-
 ---
 
-## 📊 数据规模 (截至部署日)
+## 📊 数据规模 (当前)
 
 | 数据源 | 文档数 | 存储大小 |
 |--------|--------|---------|
-| Meilisearch | 200,662 | ~670 MB |
-| MySQL | 8,355 | ~10 MB |
-| Elasticsearch | 8,355 | ~2 MB |
+| Meilisearch | 198,048 | ~640 MB |
+| MySQL | 198,048 | ~2.5 MB |
 | PanSou 频道 | 174 个 | — |
 | PanSou 插件 | 88 个 | — |
-| 关键词 | 36 个热门 | — |
+| 自有爬虫源 | 28 个 | — |
 
 ---
 
@@ -445,22 +438,21 @@ python -c "from crawl_and_index import backfill_es_from_mysql; backfill_es_from_
 - 后台密码: `D:\proxy\auth.json` (默认 `admin123`)
 - MySQL 密码: `pansearch123` (仅本地访问)
 - Meilisearch Master Key: 配置文件内 (仅本地访问)
-- ES 安全: `xpack.security.enabled=false` (仅本地访问)
 - Cloudflare Tunnel: 自动 HTTPS
 
 ---
 
 ## 📌 路线图
 
-- [x] MySQL 本地仓库
-- [x] Elasticsearch 全文索引
-- [x] Meilisearch 最大索引
-- [x] 爬虫三写 (MySQL+ES+Meili)
+- [x] MySQL 本地仓库 (198K)
+- [x] Meilisearch 搜索引擎 (198K)
+- [x] 爬虫双写 (MySQL+Meili)
 - [x] Waitress 生产部署
-- [x] MySQL+ES 快速路径
+- [x] MySQL 快速路径
 - [x] 搜索缓存 (SQLite + 内存)
+- [x] 20项定时任务 (no_agent, 零token)
+- [x] 社区/文档/网盘/论坛/GitHub 多源爬取
 - [ ] 爬虫 IP 代理池 (反爬)
 - [ ] 搜索结果分页性能优化
-- [ ] ES 中文分词 (IK)
 - [ ] 增量爬取 (非全量)
 - [ ] 监控告警

@@ -219,45 +219,6 @@ def search_mysql(keyword):
             _put_mysql(conn)
     return None
 
-# ===== Elasticsearch 搜索 =====
-ES_URL = 'http://127.0.0.1:9200'
-
-def search_es(keyword):
-    merged = {}
-    seen_urls = set()
-    try:
-        resp = requests.post(f'{ES_URL}/resources/_search', json={
-            "query": {
-                "multi_match": {
-                    "query": keyword,
-                    "fields": ["keyword^2", "note"],
-                    "type": "best_fields",
-                    "fuzziness": "AUTO"
-                }
-            },
-            "size": 500,
-            "track_total_hits": False
-        }, timeout=5)
-        hits = resp.json().get('hits', {}).get('hits', [])
-        for h in hits:
-            src = h['_source']
-            url_clean = re.sub(r'[?#].*$', '', src.get('url', ''))
-            if url_clean in seen_urls:
-                continue
-            seen_urls.add(url_clean)
-            merged.setdefault(src.get('type', 'others'), []).append({
-                'url': src['url'], 'note': src.get('note', ''),
-                'password': src.get('password', ''), 'datetime': src.get('datetime', ''),
-            })
-        total = sum(len(v) for v in merged.values())
-        if total > 0:
-            print(f"[ES] '{keyword}': {total}条", flush=True)
-            return {'code': 0, 'data': {'merged_by_type': merged, 'total': total}}
-        return None
-    except Exception as e:
-        print(f"[ES] ERROR: {e}", flush=True)
-    return None
-
 # ===== API =====
 
 @app.route('/api/search')
@@ -284,35 +245,14 @@ def search():
         resp.headers['X-Cache'] = f'HIT {int((_t1-_t0)*1000)}ms'
         return resp
 
-    # 2. MySQL + ES 快速路径 — 离线预建索引，够50条直接秒回
+    # 2. MySQL 快速路径 — 离线预建索引，够50条直接秒回
     mysql_result = search_mysql(keyword)
     mysql_data = mysql_result['data']['merged_by_type'] if mysql_result else {}
     mysql_total = mysql_result['data']['total'] if mysql_result else 0
-    es_result = search_es(keyword)
-    es_data = es_result['data']['merged_by_type'] if es_result else {}
-    es_total = es_result['data']['total'] if es_result else 0
 
-    # 合并 MySQL + ES
-    fast_merged = dict(mysql_data)
-    fast_urls = set()
-    for items in fast_merged.values():
-        for item in items:
-            url_clean = re.sub(r'[?#].*$', '', item.get('url', ''))
-            fast_urls.add(url_clean)
-    es_new = 0
-    for t, items in es_data.items():
-        for item in items:
-            url_clean = re.sub(r'[?#].*$', '', item.get('url', ''))
-            if url_clean not in fast_urls:
-                fast_urls.add(url_clean)
-                fast_merged.setdefault(t, []).append(item)
-                es_new += 1
-    fast_total = mysql_total + es_new
-    print(f"[Fast] MySQL{mysql_total} + ES{es_new} = {fast_total}条", flush=True)
-
-    if fast_total >= 50:
-        resp = jsonify({'code': 0, 'data': {'merged_by_type': fast_merged, 'total': fast_total}})
-        resp.headers['X-Source'] = 'mysql+es'
+    if mysql_total >= 50:
+        resp = jsonify({'code': 0, 'data': {'merged_by_type': mysql_data, 'total': mysql_total}})
+        resp.headers['X-Source'] = 'mysql'
         return resp
 
     # 3. Meilisearch (ms级)
@@ -356,20 +296,23 @@ def search():
     except: pass
     print(f"[PanSou] '{keyword}': +{ps_total}条", flush=True)
 
-    # 6. 爬虫源
-    scraper_results = []
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {executor.submit(fn, keyword): fn for fn in SOURCES}
-        for future in as_completed(futures, timeout=90):
-            try:
-                scraper_results.extend(future.result(timeout=60))
-            except: pass
-    for r in scraper_results:
-        url_clean = re.sub(r'[?#].*$', '', r['url'])
-        if url_clean not in seen_urls:
-            seen_urls.add(url_clean)
-            t = r.pop('type', 'others')
-            merged.setdefault(t, []).append(r)
+    # 6. 爬虫源 (容错: 超时不阻断搜索)
+    try:
+        scraper_results = []
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {executor.submit(fn, keyword): fn for fn in SOURCES}
+            for future in as_completed(futures, timeout=15):
+                try:
+                    scraper_results.extend(future.result(timeout=10))
+                except: pass
+        for r in scraper_results:
+            url_clean = re.sub(r'[?#].*$', '', r['url'])
+            if url_clean not in seen_urls:
+                seen_urls.add(url_clean)
+                t = r.pop('type', 'others')
+                merged.setdefault(t, []).append(r)
+    except Exception:
+        pass
 
     total = sum(len(v) for v in merged.values())
     print(f"[Merge] '{keyword}': Meili{meili_total} + MySQL{mysql_new} + PanSou{ps_total} + 爬虫 → {total}条", flush=True)
@@ -387,7 +330,7 @@ def debug_cache():
 
 @app.route('/api/health')
 def health():
-    meili_ok = mysql_ok = es_ok = False
+    meili_ok = mysql_ok = False
     try:
         r = requests.get(f'{MEILI_URL}/health', timeout=2)
         meili_ok = r.status_code == 200
@@ -398,15 +341,10 @@ def health():
         mysql_ok = True
         _put_mysql(conn)
     except: pass
-    try:
-        r = requests.get(f'{ES_URL}/_cluster/health', timeout=2)
-        es_ok = r.json().get('status') in ('green', 'yellow')
-    except: pass
     return jsonify({
-        'status': 'ok',
-        'meilisearch': 'connected' if meili_ok else 'disconnected',
+        'status': 'ok' if (meili_ok and mysql_ok) else 'degraded',
         'mysql': 'connected' if mysql_ok else 'disconnected',
-        'elasticsearch': 'connected' if es_ok else 'disconnected',
+        'meilisearch': 'connected' if meili_ok else 'disconnected',
     })
 
 if __name__ == '__main__':
