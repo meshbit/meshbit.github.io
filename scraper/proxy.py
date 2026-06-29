@@ -352,7 +352,11 @@ def health():
 def feedback():
     """接收用户投稿分享"""
     try:
-        data = request.get_json(force=True)
+        raw = request.get_data(as_text=True)
+        try:
+            data = json.loads(raw)
+        except:
+            data = {'links': raw[:5000]}
         links = (data.get('links') or '').strip()
         if not links or len(links) < 10:
             return jsonify({'code': 1, 'msg': '请至少输入一个有效链接'})
