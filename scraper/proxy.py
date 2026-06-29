@@ -347,6 +347,36 @@ def health():
         'meilisearch': 'connected' if meili_ok else 'disconnected',
     })
 
+
+@app.route('/api/feedback', methods=['POST'])
+def feedback():
+    """接收用户投稿分享"""
+    try:
+        data = request.get_json(force=True)
+        links = (data.get('links') or '').strip()
+        if not links or len(links) < 10:
+            return jsonify({'code': 1, 'msg': '请至少输入一个有效链接'})
+        # 写入 submissions.json
+        sub_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'submissions.json')
+        entry = {
+            'time': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'links': links[:5000],
+            'ip': request.remote_addr or 'unknown'
+        }
+        subs = []
+        if os.path.exists(sub_file):
+            try:
+                with open(sub_file, 'r', encoding='utf-8') as f:
+                    subs = json.load(f)
+            except: pass
+        subs.append(entry)
+        with open(sub_file, 'w', encoding='utf-8') as f:
+            json.dump(subs, f, ensure_ascii=False, indent=2)
+        print(f'[反馈] 收到投稿 {len(links)}字', flush=True)
+        return jsonify({'code': 0, 'msg': '投稿成功！感谢分享 🎉'})
+    except Exception as e:
+        return jsonify({'code': 1, 'msg': f'提交失败: {str(e)[:80]}'})
+
 if __name__ == '__main__':
     from waitress import serve
     init_db()
