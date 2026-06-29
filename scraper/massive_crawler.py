@@ -41,7 +41,7 @@ try:
     def get_mysql():
         try:
             conn = MYSQL_POOL.get_nowait()
-            try: conn.ping(reconnect=True)
+            try: conn.ping()
             except: conn = pymysql.connect(**MYSQL_CONFIG)
             return conn
         except Empty: return pymysql.connect(**MYSQL_CONFIG)
@@ -216,7 +216,7 @@ def main():
         if last_index >= total_keywords: last_index = 0; round_num += 1
         save_progress(last_index, total_processed, round_num)
         stats = get_storage_stats()
-        print(f"[Storage] MySQL: {stats['mysql']} | Meili: {stats['meili']} | ES: {stats['es']}")
+        print(f"[Storage] MySQL: {stats.get('mysql')} | Meili: {stats.get('meili')}")
     print_summary(total_processed, round_new_docs)
 
 if __name__ == "__main__":

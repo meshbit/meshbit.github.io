@@ -4,6 +4,7 @@
 Session 复用 + 连接池，避免套接字耗尽
 """
 import json, hashlib, time, requests, sys, os
+from urllib.parse import quote
 import pymysql
 from queue import Queue, Empty
 
@@ -12,7 +13,7 @@ os.environ['HTTP_PROXY'] = ''
 os.environ['HTTPS_PROXY'] = ''
 
 MEILI_URL = 'http://127.0.0.1:7700'
-MEILI_KEY = '5078ead29c1a6784d1b43ae67dfb1c4b17af875100bb14cb37a85dc4bbbeed03'
+MEILI_KEY = 'pansou-meili-key'
 PROXY_API = 'http://localhost:5003/api/search'
 
 # HTTP Session 复用
@@ -110,7 +111,7 @@ def save_to_mysql(docs):
 def search_and_index(keyword):
     try:
         session = _get_session()
-        resp = session.get(f'{PROXY_API}?kw={keyword}', timeout=120)
+        resp = session.get(f'{PROXY_API}?kw={quote(keyword)}', timeout=120)
         data = resp.json().get('data', {}).get('merged_by_type', {})
         docs = []
         seen = set()

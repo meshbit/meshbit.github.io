@@ -128,7 +128,7 @@ SOURCES = [scrape_browser, scrape_from_panshare, scrape_quark_share, scrape_aliy
 
 # ===== Meilisearch =====
 MEILI_URL = 'http://127.0.0.1:7700'
-MEILI_KEY = '5078ead29c1a6784d1b43ae67dfb1c4b17af875100bb14cb37a85dc4bbbeed03'
+MEILI_KEY = 'pansou-meili-key'
 
 _meili_session = None
 def _get_meili_session():
@@ -186,7 +186,7 @@ def search_meili(keywords):
 
 # ===== MySQL 本地库搜索 =====
 def search_mysql(keyword):
-    """搜 MySQL 本地库（离线预建索引，ms级返回）"""
+    """搜 MySQL 本地库（FULLTEXT 索引，ms级返回）"""
     merged = {}
     seen_urls = set()
     conn = None
@@ -195,8 +195,8 @@ def search_mysql(keyword):
         cursor = conn.cursor()
         cursor.execute(
             "SELECT url, note, password, type, datetime FROM resources "
-            "WHERE keyword LIKE %s OR note LIKE %s LIMIT 500",
-            (f'%{keyword}%', f'%{keyword}%')
+            "WHERE MATCH(keyword, note) AGAINST(%s IN BOOLEAN MODE) LIMIT 500",
+            (keyword,)
         )
         for url, note, pwd, ptype, dt in cursor.fetchall():
             url_clean = re.sub(r'[?#].*$', '', url)

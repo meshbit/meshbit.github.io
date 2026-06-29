@@ -12,7 +12,7 @@ os.environ["http_proxy"] = ""
 os.environ["https_proxy"] = ""
 
 MEILI_URL = "http://127.0.0.1:7700"
-MEILI_KEY = "5078ead29c1a6784d1b43ae67dfb1c4b17af875100bb14cb37a85dc4bbbeed03"
+MEILI_KEY = 'pansou-meili-key'
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROGRESS_FILE = os.path.join(SCRIPT_DIR, "aikanzy_full_progress.json")
 CATEGORIES = ["dy", "dsj", "dmdh", "zy", "dj", "qt"]

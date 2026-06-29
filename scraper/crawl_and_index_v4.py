@@ -3,6 +3,7 @@
 七项全改版: asyncio并行 + aiohttp异步 + 随机节奏 + 双写MySQL/Meili
 """
 import asyncio, aiohttp, json, hashlib, time, os, random
+from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 import pymysql
 from queue import Queue, Empty
@@ -11,7 +12,7 @@ os.environ['HTTP_PROXY'] = ''
 os.environ['HTTPS_PROXY'] = ''
 
 MEILI_URL = 'http://127.0.0.1:7700'
-MEILI_KEY = '5078ead29c1a6784d1b43ae67dfb1c4b17af875100bb14cb37a85dc4bbbeed03'
+MEILI_KEY = 'pansou-meili-key'
 PROXY_API = 'http://localhost:5003/api/search'
 
 # ============================================================
@@ -169,7 +170,7 @@ async def crawl_keyword(session, keyword, idx, total):
             await asyncio.sleep(d)
 
         t0 = time.time()
-        data = await fetch_with_retry(session, f'{PROXY_API}?kw={keyword}')
+        data = await fetch_with_retry(session, f'{PROXY_API}?kw={quote(keyword)}')
 
         if not data or not data.get('data'):
             print(f'  [{keyword}] 0条', flush=True)
