@@ -20,7 +20,7 @@ os.environ['HTTPS_PROXY'] = ''
 app = Flask(__name__)
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 TIMEOUT = 10
-PANSOU_API = 'http://localhost:8081/api/search'
+PANSOU_API = 'http://localhost:8080/api/search'  # 已废弃：原PanSou聚合源，避免循环调用
 
 # browser.py 路径
 BROWSER_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'browser.py')
@@ -29,7 +29,7 @@ PYTHON = sys.executable
 # MySQL 连接池
 MYSQL_POOL = Queue(maxsize=5)
 MYSQL_CONFIG = {
-    'host': '127.0.0.1', 'port': 3307, 'user': 'root',
+    'host': '127.0.0.1', 'port': 3306, 'user': 'root',
     'password': 'pansearch123', 'database': 'pansearch',
     'charset': 'utf8mb4', 'connect_timeout': 5,
 }
@@ -223,13 +223,24 @@ def search_mysql(keyword):
 
 @app.route('/api/search')
 def search():
-    keyword = request.args.get('kw', '').strip()
-    try:
-        fixed = keyword.encode('latin-1').decode('utf-8')
-        if fixed != keyword:
-            keyword = fixed
-    except (UnicodeError, LookupError):
-        pass
+    # 从原始 query string 获取 kw，避免 Werkzeug UTF-8 自动解码问题
+    from urllib.parse import parse_qs
+    raw_qs = request.query_string.decode('latin-1') if isinstance(request.query_string, bytes) else request.query_string
+    params = parse_qs(raw_qs)
+    kw_list = params.get('kw', [''])
+    keyword = kw_list[0].strip()
+    
+    # 尝试 GBK → UTF-8 修复
+    if keyword:
+        try:
+            raw_bytes = keyword.encode('latin-1')
+            try:
+                keyword = raw_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                try:
+                    keyword = raw_bytes.decode('gbk')
+                except: pass
+        except: pass
     if not keyword or len(keyword) < 2:
         return jsonify({'code': 0, 'data': {'merged_by_type': {}, 'total': 0}})
 
@@ -246,7 +257,11 @@ def search():
         return resp
 
     # 2. MySQL 快速路径 — 离线预建索引，够50条直接秒回
-    mysql_result = search_mysql(keyword)
+    # 快速模式：MySQL挂了就跳过，直接走 Meilisearch
+    mysql_result = None
+    try:
+        mysql_result = search_mysql(keyword)
+    except: pass
     mysql_data = mysql_result['data']['merged_by_type'] if mysql_result else {}
     mysql_total = mysql_result['data']['total'] if mysql_result else 0
 
@@ -260,8 +275,8 @@ def search():
     meili_data = meili_result['data']['merged_by_type'] if meili_result else {}
     meili_total = meili_result['data']['total'] if meili_result else 0
     print(f"[Meili] '{keyword}': {meili_total}条", flush=True)
-
-    # 4. 合并 Meili + MySQL
+    
+    # 合并 Meili + MySQL
     merged = dict(meili_data)
     seen_urls = set()
     for items in merged.values():
@@ -278,44 +293,9 @@ def search():
                 mysql_new += 1
     if mysql_total > 0:
         print(f"[MySQL] +{mysql_new}条(去重后)", flush=True)
-
-    # 5. PanSou 实时聚合
-    ps_total = 0
-    try:
-        resp = requests.get(f'{PANSOU_API}?kw={quote(keyword)}', timeout=8)
-        if resp.status_code == 200:
-            pansou_data = resp.json().get('data', {}).get('merged_by_type', {})
-            for t, items in pansou_data.items():
-                for item in items:
-                    url_clean = re.sub(r'[?#].*$', '', item.get('url', ''))
-                    if url_clean in seen_urls:
-                        continue
-                    seen_urls.add(url_clean)
-                    merged.setdefault(t, []).append(item)
-                    ps_total += 1
-    except: pass
-    print(f"[PanSou] '{keyword}': +{ps_total}条", flush=True)
-
-    # 6. 爬虫源 (容错: 超时不阻断搜索)
-    try:
-        scraper_results = []
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {executor.submit(fn, keyword): fn for fn in SOURCES}
-            for future in as_completed(futures, timeout=15):
-                try:
-                    scraper_results.extend(future.result(timeout=10))
-                except: pass
-        for r in scraper_results:
-            url_clean = re.sub(r'[?#].*$', '', r['url'])
-            if url_clean not in seen_urls:
-                seen_urls.add(url_clean)
-                t = r.pop('type', 'others')
-                merged.setdefault(t, []).append(r)
-    except Exception:
-        pass
-
+    
     total = sum(len(v) for v in merged.values())
-    print(f"[Merge] '{keyword}': Meili{meili_total} + MySQL{mysql_new} + PanSou{ps_total} + 爬虫 → {total}条", flush=True)
+    print(f"[Merge] '{keyword}': Meili{meili_total} + MySQL{mysql_new} → {total}条  ← 快速模式(跳过爬虫)", flush=True)
     save_results(keyword, merged)
     return jsonify({'code': 0, 'data': {'merged_by_type': merged, 'total': total}})
 

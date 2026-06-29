@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
 
 type SR struct {
@@ -41,11 +46,25 @@ var (
 	chMu    sync.RWMutex
 	plugs   []string
 	plugMu  sync.RWMutex
-	chFile  = `D:\pansou.env`
-	subFile = `D:\proxy\subs.json`
-	adFile  = `D:\proxy\ads.json`
-	authFile = `D:\proxy\auth.json`
+	exeDir  string
+	chFile  string
+	subFile string
+	adFile  string
+	authFile string
 )
+
+// gbkToUTF8 converts a GBK-encoded string to UTF-8
+func gbkToUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	reader := transform.NewReader(bytes.NewReader([]byte(s)), simplifiedchinese.GBK.NewDecoder())
+	d, err := io.ReadAll(reader)
+	if err != nil {
+		return s
+	}
+	return string(d)
+}
 
 func loadChs() {
 	b, _ := os.ReadFile(chFile); s := string(b)
@@ -150,6 +169,14 @@ func loadDeadLinks() map[string]bool {
 }
 
 func main() {
+	// Resolve data file paths relative to executable
+	exe, _ := os.Executable()
+	exeDir = filepath.Dir(exe)
+	chFile = filepath.Join(exeDir, "pansou.env")
+	subFile = filepath.Join(exeDir, "subs.json")
+	adFile = filepath.Join(exeDir, "ads.json")
+	authFile = filepath.Join(exeDir, "auth.json")
+
 	loadChs()
 	initAuth()
 	port := "8080"
@@ -173,6 +200,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		kw := r.URL.Query().Get("kw")
+		kw = gbkToUTF8(kw)  // GBK→UTF-8 转换
 		if len(kw) < 2 { json.NewEncoder(w).Encode(&SResp{Code: 0}); return }
 		cacheMu.RLock(); ce, ok := cache[kw]; cacheMu.RUnlock()
 		if ok && time.Since(ce.t) < 10*time.Minute { json.NewEncoder(w).Encode(&ce.data); return }
@@ -194,6 +222,50 @@ func main() {
 		cacheMu.Lock(); cache[kw] = &CE{data: sr, t: time.Now()}; cacheMu.Unlock()
 		scMu.Lock(); sc++; scMu.Unlock()
 		json.NewEncoder(w).Encode(sr)
+	})
+	mux.HandleFunc("/api/feedback", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == "OPTIONS" { return }
+		resp, err := http.Post("http://localhost:5003/api/feedback", "application/json", r.Body)
+		if err != nil { json.NewEncoder(w).Encode(map[string]string{"error": err.Error()}); return }
+		defer resp.Body.Close()
+		io.Copy(w, resp.Body)
+	})
+	// /submit: 用户投稿（GET + POST，直接写 subs.json）
+	mux.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == "OPTIONS" { return }
+		
+		var links string
+		if r.Method == "GET" {
+			links = r.URL.Query().Get("links")
+		} else {
+			b, _ := io.ReadAll(r.Body)
+			var data map[string]string
+			json.Unmarshal(b, &data)
+			links = data["links"]
+		}
+		if len(links) < 10 {
+			json.NewEncoder(w).Encode(map[string]interface{}{"code": 1, "msg": "请至少输入一个有效链接"})
+			return
+		}
+		
+		// 读取现有投稿
+		var subs []map[string]string
+		if raw, err := os.ReadFile(subFile); err == nil {
+			json.Unmarshal(raw, &subs)
+		}
+		// 追加新投稿
+		subs = append(subs, map[string]string{
+			"name":    "匿名投稿",
+			"time":    time.Now().Format("2006-01-02 15:04:05"),
+			"content": links,
+		})
+		b, _ := json.MarshalIndent(subs, "", "  ")
+		os.WriteFile(subFile, b, 0644)
+		json.NewEncoder(w).Encode(map[string]interface{}{"code": 0, "msg": "投稿成功！感谢分享 🎉"})
 	})
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -303,6 +375,10 @@ func main() {
 		io.WriteString(w, adminHTML)
 	})
 	mux.HandleFunc("/admin", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/admin/", 301) })
+	mux.HandleFunc("/login.html", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		io.WriteString(w, loginHTML)
+	})
 	fs := http.FileServer(http.Dir(abs))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
@@ -433,4 +509,29 @@ document.querySelectorAll('.sb a').forEach(function(a){a.onclick=function(e){e.p
 // 点击页面任意位置关闭侧边栏（移动端）
 document.addEventListener('click',function(e){if(window.innerWidth<=768&&!e.target.closest('.sb')&&!e.target.closest('.mbtn'))document.querySelector('.sb').classList.remove('open')});
 loadPage('d');
+</script></body></html>`
+
+const loginHTML = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>凌云后台 - 登录</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#f5f6fa;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.lb{background:#fff;border-radius:12px;padding:40px;width:360px;max-width:90vw;box-shadow:0 4px 24px rgba(0,0,0,.08);text-align:center}
+.lb h1{font-size:24px;margin-bottom:8px;color:#1a1a2e}.lb p{color:#999;font-size:13px;margin-bottom:24px}
+.lb input{width:100%;padding:12px 16px;border:1px solid #ddd;border-radius:6px;font-size:16px;margin-bottom:16px;outline:none;transition:border .2s}
+.lb input:focus{border-color:#1a73e8}
+.lb button{width:100%;padding:12px;background:#1a73e8;color:#fff;border:none;border-radius:6px;font-size:16px;cursor:pointer;transition:background .2s}
+.lb button:hover{background:#1557b0}
+.lb .err{color:#e74c3c;font-size:13px;margin-top:12px;display:none}
+</style></head><body>
+<div class="lb"><h1>🔐 凌云后台</h1><p>请输入管理员密码</p>
+<input type="password" id="pw" placeholder="密码" autofocus>
+<button onclick="login()">登 录</button>
+<div class="err" id="err">密码错误</div></div>
+<script>
+async function login(){
+ var pw=document.getElementById('pw').value;
+ var r=await fetch('/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+ var d=await r.json();
+ if(d.ok) location.href='/admin/';
+ else{document.getElementById('err').style.display='block';document.getElementById('pw').value=''}
+}
+document.getElementById('pw').addEventListener('keydown',function(e){if(e.key==='Enter')login()});
 </script></body></html>`

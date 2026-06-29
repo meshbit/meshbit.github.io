@@ -337,8 +337,7 @@ function submitFeedback(){
   const links=document.getElementById('feedbackLinks').value.trim();
   if(!links||links.length<10){msg.style.color='#ea4335';msg.textContent='请至少输入一个有效链接';return}
   btn.disabled=true;btn.textContent='提交中...';msg.textContent='';
-  fetch('/api/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({links:links})})
-    .then(r=>r.json())
+  fetch('/submit?links='+encodeURIComponent(links)).then(r=>r.json())
     .then(d=>{
       if(d.code===0){msg.style.color='#34a853';msg.textContent=d.msg;document.getElementById('feedbackLinks').value='';document.getElementById('feedbackCaptcha').value=''}
       else{msg.style.color='#ea4335';msg.textContent=d.msg}
