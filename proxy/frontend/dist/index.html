@@ -303,7 +303,31 @@ function switchPage(p){currentPage=p;renderResults();window.scrollTo({top:0,beha
 function copyText(text,btn){navigator.clipboard.writeText(text).then(()=>{const o=btn.textContent;btn.classList.add('copied');btn.textContent='✓ 已复制';setTimeout(()=>{btn.classList.remove('copied');btn.textContent=o},1500);toast('已复制')})}
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.opacity='1';t.style.pointerEvents='auto';setTimeout(()=>{t.style.opacity='0';t.style.pointerEvents='none'},1800)}
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
-function showFeedback(){toast('投稿请联系：admin@okva.cc')}
+function showFeedback(){
+  const overlay=document.createElement('div');
+  overlay.id='feedbackOverlay';
+  overlay.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML=`<div style="background:#fff;border-radius:12px;padding:32px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="margin:0;font-size:18px">✉️ 分享投稿</h3>
+      <button onclick="this.closest('#feedbackOverlay').remove()" style="border:none;background:none;font-size:22px;cursor:pointer;color:#999;padding:4px 8px">&times;</button>
+    </div>
+    <p style="color:#555;font-size:14px;line-height:1.7;margin:0 0 16px">
+      如果你有网盘资源想分享给大家，或者发现链接失效、有功能建议，欢迎来信！
+    </p>
+    <div style="background:#f8f9fa;border-radius:8px;padding:16px;margin-bottom:16px">
+      <p style="margin:0 0 8px;font-size:13px;color:#666">📮 投稿邮箱：</p>
+      <a href="mailto:admin@okva.cc" style="font-size:16px;font-weight:600;color:#fbbc04;text-decoration:none">admin@okva.cc</a>
+      <button onclick="copyText('admin@okva.cc',this)" style="display:block;margin-top:8px;font-size:12px;border:1px solid #dadce0;border-radius:4px;padding:4px 12px;background:#fff;cursor:pointer">📋 复制邮箱</button>
+    </div>
+    <div style="font-size:12px;color:#999;line-height:1.6">
+      📌 请注明：资源名称 + 网盘链接 + 提取码<br>
+      ⚡ 审核通过后会收录到凌云搜索
+    </div>
+  </div>`;
+  overlay.onclick=function(e){if(e.target===overlay)overlay.remove()};
+  document.body.appendChild(overlay);
+}
 // 动态加载导航链接
 fetch('/api/navlinks').then(r=>r.json()).then(links=>{
   var h='';
