@@ -29,7 +29,7 @@ PYTHON = sys.executable
 # MySQL 连接池
 MYSQL_POOL = Queue(maxsize=5)
 MYSQL_CONFIG = {
-    'host': '127.0.0.1', 'port': 3306, 'user': 'root',
+    'host': '127.0.0.1', 'port': 3307, 'user': 'root',
     'password': 'pansearch123', 'database': 'pansearch',
     'charset': 'utf8mb4', 'connect_timeout': 5,
 }

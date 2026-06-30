@@ -6,7 +6,7 @@ services:
     container_name: pansou
     restart: unless-stopped
     ports:
-      - "8081:80"
+      - "8082:80"
     volumes:
       - ./data:/app/data
       - ./frontend/dist:/app/frontend/dist

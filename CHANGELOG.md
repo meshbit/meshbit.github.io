@@ -1,3 +1,12 @@
+## 2026-06-30
+- 重构凌云搜索架构：Go代理接管8081端口（原PanSou Docker），统一前后端入口
+  - PanSou Docker 停用，Go代理直接提供前端 + 后台 + API
+  - 后台管理 /admin/ + 登录 /login.html 恢复正常
+  - 分享投稿 /submit API 恢复正常
+- 修复 proxy.py MYSQL_CONFIG 端口 3306→3307
+- MySQL FULLTEXT 索引重建为 ngram parser（支持中文分词）
+- 启动脚本 lingyun-proxy.bat 适配新端口和架构
+
 ## 2026-06-29
 - 修复 Meilisearch 密钥: 4个文件统一为 pansou-meili-key
 - 修复中文关键词 URL 编码: crawl_and_index.py / crawl_and_index_v4.py 加入 quote()

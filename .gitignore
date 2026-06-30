@@ -21,3 +21,4 @@ scraper/__pycache__/
 # 构建产物
 proxy/proxy.exe
 *.exe
+meilisearch/data/

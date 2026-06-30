@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分享投稿 - 凌云搜索</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#f5f6fa;min-height:100vh}
+.header{background:#fff;padding:16px 24px;box-shadow:0 2px 8px rgba(0,0,0,.06);display:flex;align-items:center;gap:12px}
+.header a{color:#1a1a2e;text-decoration:none;font-size:20px;font-weight:700}
+.header .back{color:#999;font-size:14px}
+.container{max-width:640px;margin:32px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:32px;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.card h2{font-size:22px;color:#1a1a2e;margin-bottom:8px}
+.card p.desc{color:#999;font-size:14px;margin-bottom:24px}
+.card textarea{width:100%;min-height:200px;padding:16px;border:1px solid #e0e0e0;border-radius:8px;font-size:15px;line-height:1.6;resize:vertical;outline:none;transition:border .2s}
+.card textarea:focus{border-color:#fbbc04}
+.card .hint{color:#999;font-size:12px;margin-top:8px}
+.card button{width:100%;padding:14px;margin-top:20px;background:#fbbc04;color:#202124;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;transition:background .2s}
+.card button:hover{background:#e5a800}
+.card button:disabled{background:#ccc;cursor:not-allowed}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:12px 24px;border-radius:8px;font-size:14px;z-index:999;transition:opacity .3s;opacity:0;pointer-events:none}
+.toast.show{opacity:1}
+.toast.success{background:#34a853;color:#fff}
+.toast.error{background:#ea4335;color:#fff}
+</style>
+</head>
+<body>
+<div class="header">
+  <a href="/">凌云搜索</a>
+  <span class="back">/ 分享投稿</span>
+</div>
+<div class="container">
+  <div class="card">
+    <h2>📤 分享投稿</h2>
+    <p class="desc">粘贴网盘链接，每行一个，支持百度/夸克/阿里/迅雷/天翼/UC/115 等</p>
+    <textarea id="links" placeholder="https://pan.baidu.com/s/xxxx&#10;https://pan.quark.cn/s/xxxx&#10;https://www.alipan.com/s/xxxx"></textarea>
+    <p class="hint">最少输入 1 个有效链接（至少 10 个字符）</p>
+    <button onclick="submit()" id="btn">提交投稿</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+async function submit() {
+  const btn = document.getElementById('btn');
+  const links = document.getElementById('links').value.trim();
+  if (links.length < 10) {
+    showToast('请至少输入一个有效链接', 'error');
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '提交中...';
+  try {
+    const r = await fetch('/submit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({links})
+    });
+    const d = await r.json();
+    if (d.code === 0) {
+      showToast(d.msg || '投稿成功！感谢分享 🎉', 'success');
+      document.getElementById('links').value = '';
+    } else {
+      showToast(d.msg || '提交失败', 'error');
+    }
+  } catch(e) {
+    showToast('网络错误，请重试', 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = '提交投稿';
+}
+</script>
+</body>
+</html>
